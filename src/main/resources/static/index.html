@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Alarm Center</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        input, select { padding: 5px; margin: 5px; }
+        #sse-status { font-weight: bold; }
+        #sse-messages { max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>MCP Alarm Center</h1>
+    
+    <!-- SSE连接测试 -->
+    <div class="section">
+        <h2>SSE连接测试</h2>
+        <button onclick="connectSSE()">连接SSE</button>
+        <button onclick="disconnectSSE()">断开SSE</button>
+        <div id="sse-status" class="info">未连接</div>
+        <div id="sse-messages"></div>
+    </div>
+
+    <!-- MCP健康检查 -->
+    <div class="section">
+        <h2>MCP健康检查</h2>
+        <button onclick="checkMcpHealth()">检查MCP健康状态</button>
+        <div id="mcp-health-result"></div>
+    </div>
+
+    <!-- 最新告警查询 -->
+    <div class="section">
+        <h2>最新告警查询</h2>
+        <label>数量限制：</label>
+        <input type="number" id="latest-limit" value="5" min="1" max="10">
+        <button onclick="getLatestAlarms()">查询最新告警</button>
+        <div id="latest-result"></div>
+    </div>
+
+    <!-- 告警数量统计 -->
+    <div class="section">
+        <h2>告警数量统计</h2>
+        <label>时间范围：</label>
+        <select id="count-range">
+            <option value="today">今天</option>
+            <option value="yesterday">昨天</option>
+            <option value="last7days">最近7天</option>
+            <option value="last30days">最近30天</option>
+            <option value="lastmonth">最近一个月</option>
+            <option value="last3months">最近三个月</option>
+        </select>
+        <button onclick="getAlarmCount()">查询告警数量</button>
+        <div id="count-result"></div>
+    </div>
+
+    <!-- 区间统计 -->
+    <div class="section">
+        <h2>区间统计</h2>
+        <label>开始时间：</label>
+        <input type="datetime-local" id="range-start">
+        <label>结束时间：</label>
+        <input type="datetime-local" id="range-end">
+        <button onclick="getAlarmCountBetween()">区间统计</button>
+        <div id="count-range-result"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            eventSource = new EventSource('/sse');
+            document.getElementById('sse-status').textContent = '连接中...';
+            document.getElementById('sse-status').className = 'info';
+            
+            eventSource.onopen = function(event) {
+                document.getElementById('sse-status').textContent = '已连接';
+                document.getElementById('sse-status').className = 'success';
+                addSseMessage('连接已建立');
+            };
+            
+            eventSource.onmessage = function(event) {
+                addSseMessage('收到消息: ' + event.data);
+            };
+            
+            eventSource.onerror = function(event) {
+                document.getElementById('sse-status').textContent = '连接错误';
+                document.getElementById('sse-status').className = 'error';
+                addSseMessage('连接错误: ' + JSON.stringify(event));
+            };
+        }
+
+        function disconnectSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                document.getElementById('sse-status').textContent = '已断开';
+                document.getElementById('sse-status').className = 'info';
+                addSseMessage('连接已断开');
+            }
+        }
+
+        function addSseMessage(message) {
+            const messagesDiv = document.getElementById('sse-messages');
+            const time = new Date().toLocaleTimeString();
+            messagesDiv.innerHTML += `<div>[${time}] ${message}</div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function checkMcpHealth() {
+            fetch('/mcp/health')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('mcp-health-result').innerHTML = 
+                        `<span class="success">MCP服务状态: ${data.status}, 服务名: ${data.service}</span>`;
+                })
+                .catch(e => {
+                    document.getElementById('mcp-health-result').innerHTML = 
+                        `<span class="error">MCP健康检查失败: ${e}</span>`;
+                });
+        }
+
+        function getLatestAlarms() {
+            const limit = document.getElementById('latest-limit').value;
+            fetch(`/api/alarms/latest?limit=${limit}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.alarms && data.alarms.length > 0) {
+                        let html = `<b>共${data.totalCount}条，显示${data.alarms.length}条</b>`;
+                        if (data.hasMore) html += ' <span style="color:orange">(还有更多，分页查询)</span>';
+                        html += '<table><tr><th>alertId</th><th>level</th><th>type</th><th>system</th><th>reason</th><th>endTime</th></tr>';
+                        data.alarms.forEach(a => {
+                            html += `<tr><td>${a.alertId||''}</td><td>${a.alarmLevel||''}</td><td>${a.alarmType||''}</td><td>${a.systemName||''}</td><td>${a.failReason||''}</td><td>${a.endTime||''}</td></tr>`;
+                        });
+                        html += '</table>';
+                        document.getElementById('latest-result').innerHTML = html;
+                    } else {
+                        document.getElementById('latest-result').innerHTML = '<span class="error">无数据</span>';
+                    }
+                })
+                .catch(e => {
+                    document.getElementById('latest-result').innerHTML = '<span class="error">查询失败: '+e+'</span>';
+                });
+        }
+
+        function getAlarmCount() {
+            const range = document.getElementById('count-range').value;
+            fetch(`/api/alarms/count?timeRange=${range}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.count !== undefined) {
+                        document.getElementById('count-result').innerHTML = `<span class="success">${data.timeRange}告警数量：${data.count}</span>`;
+                    } else {
+                        document.getElementById('count-result').innerHTML = `<span class="error">${data.message||'查询失败'}</span>`;
+                    }
+                })
+                .catch(e => {
+                    document.getElementById('count-result').innerHTML = '<span class="error">查询失败: '+e+'</span>';
+                });
+        }
+
+        function getAlarmCountBetween() {
+            const start = document.getElementById('range-start').value;
+            const end = document.getElementById('range-end').value;
+            if (!start || !end) {
+                document.getElementById('count-range-result').innerHTML = '<span class="error">请选择起止时间</span>';
+                return;
+            }
+            // 只传本地时间，不拼接+08:00
+            const startIso = start.replace(' ', 'T');
+            const endIso = end.replace(' ', 'T');
+            fetch(`/api/alarms/count/range?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.count !== undefined) {
+                        document.getElementById('count-range-result').innerHTML = `<span class="success">${data.timeRange}告警数量：${data.count}</span>`;
+                    } else {
+                        document.getElementById('count-range-result').innerHTML = `<span class="error">${data.message||'查询失败'}</span>`;
+                    }
+                })
+                .catch(e => {
+                    document.getElementById('count-range-result').innerHTML = '<span class="error">查询失败: '+e+'</span>';
+                });
+        }
+
+        // 页面加载时自动检查MCP健康状态
+        window.onload = function() {
+            checkMcpHealth();
+        };
+    </script>
+</body>
+</html> 

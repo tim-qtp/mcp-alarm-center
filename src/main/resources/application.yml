@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: mcp-alarm-center
+  
+  # MongoDB配置
+  data:
+    mongodb:
+      host: 100.80.6.214
+      port: 27017
+      database: test
+      username: root
+      password: Zhywgl0411
+      authentication-database: admin
+  
+  # MCP服务端配置
+  ai:
+    mcp:
+      server:
+        enabled: true
+        name: alarm-center-mcp
+        version: 1.0.0
+        description: 告警中心MCP服务，提供告警查询和管理功能
+        type: SYNC
+        sse-message-endpoint: /mcp/message
+        sse-endpoint: /sse
+        tool-change-notification: true
+        resource-change-notification: true
+        prompt-change-notification: true
+        # 添加媒体类型配置
+        content-type: application/json
+        # sse
+        stdio: false
+
+# 服务器配置
+server:
+  port: 8088
+
+# 日志配置
+logging:
+  level:
+    tianpan.mcpalarmcenter: DEBUG
+    org.springframework.web: DEBUG 
