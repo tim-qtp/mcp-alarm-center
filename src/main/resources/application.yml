@@ -21,13 +21,13 @@ spring:
         version: 1.0.0
         description: 告警中心MCP服务，提供告警查询和管理功能
         type: SYNC
-        sse-message-endpoint: /mcp/message
+        sse-message-endpoint: /sse
         sse-endpoint: /sse
         tool-change-notification: true
         resource-change-notification: true
         prompt-change-notification: true
         # 添加媒体类型配置
-        content-type: application/json
+#        content-type: application/json
         # sse
         stdio: false
 
@@ -38,5 +38,12 @@ server:
 # 日志配置
 logging:
   level:
+    root: INFO
     tianpan.mcpalarmcenter: DEBUG
-    org.springframework.web: DEBUG 
+    org.springframework.web: DEBUG
+    org.springframework.web.servlet.mvc.method.annotation.SseEmitter: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/mcp-alarm-center.log 
